@@ -43,8 +43,17 @@ def show_classes(training_path):
             classes_counter[c_id] += 1
         if len(c_ids) == 0:
             classes_counter[17] += 1
-    plt.figure()
+    total_num = len(lines)
     num_keys = sorted(list(classes_counter.keys()))
+    weights = np.ones([17, 2], dtype=np.float32)
+    for index in num_keys[:-1]:
+        occur_times = classes_counter[index]
+        weight1 = (total_num - occur_times) / total_num
+        weight0 = occur_times / total_num
+        weights[index, :] = [weight0, weight1]
+    np.save('../tc_data/classes_weight.npy', weights)
+    np.savetxt('../tc_data/classes_weight.txt', weights)
+    plt.figure()
     plt.bar(x=num_keys, height=[classes_counter.get(key) for key in num_keys])
     plt.xticks(num_keys)
     plt.show()

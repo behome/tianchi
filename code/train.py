@@ -31,6 +31,8 @@ def parse_args():
                         help='the path to the directory containing the validation data.')
     parser.add_argument('--test_data', type=str, default='./tc_data/track1_round1_testA_20210222.csv',
                         help='the path to the directory containing the data.')
+    parser.add_argument('--class_weight', type=str, default='./tc_data/classes_weight.npy',
+                        help="the weight about every class")
     parser.add_argument("--vocab_size", type=int, default=858, help="the size of the vocabulary")
     parser.add_argument("--embedding_size", type=int, default=256, help="the size of the word embedding")
     parser.add_argument("--hidden_size", type=int, default=256, help="the size of the hidden layer")
