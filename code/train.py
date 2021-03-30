@@ -17,7 +17,7 @@ import numpy as np
 sys.path.append(os.path.curdir)
 import models as models
 from data_op import MedicalDataloader
-from losses import MultiBceLoss
+from losses import MultiWeightedBCELoss
 import utils as utils
 
 
@@ -42,7 +42,7 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=64, help="the size of one batch")
     parser.add_argument("--dropout", type=float, default=0.5, help="the probability to set one unit to zero")
     parser.add_argument("--bn", type=int, default=0, help="option about whether to use bn layer")
-    parser.add_argument("--checkpoint_path", type=str, default="./user_data/model_data/",
+    parser.add_argument("--checkpoint_path", type=str, default="./user_data/model_data/lstm2",
                         help="the path to save model and tensorboard data")
     parser.add_argument('--seed', type=int, default=9233, help='.')
     parser.add_argument('--optim', type=str, default='Adam', help='the type of the optimizer.')
@@ -104,7 +104,7 @@ def train(args):
     model = model.cuda(args.device)
     model.train()
     optimizer = utils.build_optimizer(args, model)
-    loss_func = MultiBceLoss()
+    loss_func = MultiWeightedBCELoss(args.class_weight, args.device)
     cur_worse = 1000
     bad_times = 0
     for epoch in range(args.epochs):
@@ -149,8 +149,8 @@ def train(args):
 
 if __name__ == '__main__':
     args = parse_args()
-    with open(os.path.join(args.checkpoint_path, "config.json"), 'w', encoding='utf-8') as config_f:
-        json.dump(vars(args), config_f)
-    # train(args)
+    # with open(os.path.join(args.checkpoint_path, "config.json"), 'w', encoding='utf-8') as config_f:
+    #     json.dump(vars(args), config_f)
+    train(args)
 
 
