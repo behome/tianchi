@@ -52,11 +52,19 @@ def show_classes(training_path):
         weight0 = occur_times / total_num
         weights[index, :] = [weight0, weight1]
     np.save('../tc_data/classes_weight.npy', weights)
-    np.savetxt('../tc_data/classes_weight.txt', weights)
     plt.figure()
     plt.bar(x=num_keys, height=[classes_counter.get(key) for key in num_keys])
     plt.xticks(num_keys)
     plt.show()
+
+
+def split_17_classes(origin_path):
+    with open(origin_path, 'r') as fin:
+        lines = fin.readlines()
+    for line in lines:
+        report_id, txt, c = line.strip('\n').split('|,|')
+
+    pass
 
 
 def split_train_val(origin_path, val_num):

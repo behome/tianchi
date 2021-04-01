@@ -41,6 +41,42 @@ class MedicalDataset(Dataset):
         return len(self.corpus)
 
 
+class MedicalDatasetEasyEnsemble(Dataset):
+
+    def __init__(self, data_path, class_id, max_length=100):
+        super(MedicalDatasetEasyEnsemble, self).__init__()
+        self.class_id = class_id
+        self.max_length = max_length
+        with open(data_path, 'r') as fin:
+            lines = fin.readlines()
+        self.positive_corpus = []
+        self.negative_corpus = []
+        for line in lines:
+            report_id, txt, classes = line.strip('\n').split('|,|')
+            txt_ids = [int(ids) for ids in txt.split(' ') if len(ids.strip()) > 0]
+            classes = [int(class_id) for class_id in classes.split(' ') if len(class_id.strip()) > 0]
+            if self.class_id in classes:
+                self.positive_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 1})
+            else:
+                self.negative_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 0})
+        sample_negative_index = np.random.choice(len(self.negative_corpus), len(self.positive_corpus))
+        self.sample_negative_corpus = [self.negative_corpus[index] for index in sample_negative_index]
+        self.corpus = self.positive_corpus + self.sample_negative_corpus
+        print("++++++++After sampling total number of corpus is %d+++++++++" % len(self.corpus))
+        np.random.shuffle(self.corpus)
+
+    def __getitem__(self, index):
+        item = self.corpus[index]
+        report_id = item['report_id']
+        report_txt = item['txt']
+        report_length = len(report_txt)
+        label = item['label']
+        return report_id, report_txt, report_length, label
+
+    def __len__(self):
+        return len(self.corpus)
+
+
 class MedicalTestDataset(Dataset):
 
     def __init__(self, data_path, max_length=100):
@@ -106,6 +142,27 @@ class MedicalTestDataloader(DataLoader):
         txt_ids = torch.from_numpy(txt_ids)
         report_lengths = torch.Tensor(report_lengths)
         return report_ids, txt_ids, report_lengths
+
+
+class MedicalEasyEnsembleDataloader(DataLoader):
+
+    def __init__(self, data_path, class_id, batch_size, shuffle, num_worker):
+        dataset = MedicalDatasetEasyEnsemble(data_path, class_id)
+        super(MedicalEasyEnsembleDataloader, self).__init__(dataset=dataset, batch_size=batch_size, shuffle=shuffle,
+                                                            num_workers=num_worker,
+                                                            collate_fn=self.collate_fn)
+
+    @staticmethod
+    def collate_fn(data):
+        report_ids, report_txt, report_lengths, label = zip(*data)
+        max_length = max(report_lengths)
+        txt_ids = np.zeros((len(report_ids), max_length), dtype=int)
+        for i, txt_id in enumerate(report_txt):
+            txt_ids[i, :len(txt_id)] = txt_id
+        label = torch.Tensor(label)
+        txt_ids = torch.from_numpy(txt_ids)
+        report_lengths = torch.Tensor(report_lengths)
+        return report_ids, txt_ids, report_lengths, label
 
 
 if __name__ == '__main__':

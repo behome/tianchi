@@ -16,8 +16,8 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 sys.path.append(os.path.curdir)
 import models as models
-from data_op import MedicalDataloader
-from losses import MultiWeightedBCELoss
+from data_op import MedicalDataloader, MedicalEasyEnsembleDataloader
+from losses import MultiWeightedBCELoss, MultiBceLoss
 import utils as utils
 
 
@@ -33,16 +33,18 @@ def parse_args():
                         help='the path to the directory containing the data.')
     parser.add_argument('--class_weight', type=str, default='./tc_data/classes_weight.npy',
                         help="the weight about every class")
+    parser.add_argument("--class_id", type=int, default=0, help='the class id to train model')
+    parser.add_argument("--model_num", type=int, default=4, help='the number model will be trained for current class')
     parser.add_argument("--vocab_size", type=int, default=858, help="the size of the vocabulary")
     parser.add_argument("--embedding_size", type=int, default=256, help="the size of the word embedding")
     parser.add_argument("--hidden_size", type=int, default=256, help="the size of the hidden layer")
     parser.add_argument("--conv_hidden", type=int, default=100, help="the output channel of the conv")
-    parser.add_argument("--output_classes", type=int, default=17, help="the classes of the output")
+    parser.add_argument("--output_classes", type=int, default=1, help="the classes of the output")
     parser.add_argument("--lstm_layer", type=int, default=2, help="the number of the lstm layer")
     parser.add_argument("--batch_size", type=int, default=64, help="the size of one batch")
     parser.add_argument("--dropout", type=float, default=0.5, help="the probability to set one unit to zero")
     parser.add_argument("--bn", type=int, default=0, help="option about whether to use bn layer")
-    parser.add_argument("--checkpoint_path", type=str, default="./user_data/model_data/lstm2",
+    parser.add_argument("--checkpoint_path", type=str, default="./user_data/model_data/lstm",
                         help="the path to save model and tensorboard data")
     parser.add_argument('--seed', type=int, default=9233, help='.')
     parser.add_argument('--optim', type=str, default='Adam', help='the type of the optimizer.')
@@ -83,28 +85,25 @@ def eval_model(model, loss_func, val_data, epoch):
     return val_loss / val_num
 
 
-def train(args):
+def train(args, model_id, tb):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    train_data = MedicalDataloader(args.train_data, args.output_classes, args.batch_size, True, args.num_workers)
-    val_data = MedicalDataloader(args.val_data, args.output_classes, args.batch_size, False, args.num_workers)
+    train_data = MedicalEasyEnsembleDataloader(args.train_data, args.class_id, args.batch_size, True, args.num_workers)
+    val_data = MedicalEasyEnsembleDataloader(args.val_data, args.class_id, args.batch_size, False, args.num_workers)
     if args.model_type == 'lstm':
         model = models.LSTMModel(args)
     elif args.model_type == 'conv':
         model = models.ConvModel(args)
     else:
         raise NotImplementedError
-    if not os.path.exists(args.checkpoint_path):
-        os.makedirs(args.checkpoint_path)
-    if os.path.isfile(os.path.join(args.checkpoint_path, "model.pth")):
-        print("Load model from previous step")
-        model.load_state_dict(torch.load(os.path.join(args.checkpoint_path, "model.pth")))
-    tb = SummaryWriter(args.checkpoint_path)
+    if os.path.isfile(os.path.join(args.checkpoint_path, str(args.class_id), "model_%d.pth" % model_id)):
+        print("Load %d class %dth model from previous step" % (args.class_id, model_id))
+        model.load_state_dict(torch.load(os.path.join(args.checkpoint_path, str(args.class_id), "model_%d.pth" % model_id)))
     iteration = 0
     model = model.cuda(args.device)
     model.train()
     optimizer = utils.build_optimizer(args, model)
-    loss_func = MultiWeightedBCELoss(args.class_weight, args.device)
+    loss_func = MultiBceLoss()
     cur_worse = 1000
     bad_times = 0
     for epoch in range(args.epochs):
@@ -126,12 +125,12 @@ def train(args):
                 print("iter %d epoch %d loss: %.3f" % (iteration, epoch, train_loss))
 
             if iteration % args.save_every == 0:
-                torch.save(model.state_dict(), os.path.join(args.checkpoint_path, "model.pth"))
-                with open(os.path.join(args.checkpoint_path, "config.json"), 'w', encoding='utf-8') as config_f:
-                    json.dump(vars(args), config_f)
+                torch.save(model.state_dict(), os.path.join(args.checkpoint_path, str(args.class_id), "model_%d.pth" % model_id))
+                with open(os.path.join(args.checkpoint_path, str(args.class_id), "config.json"), 'w', encoding='utf-8') as config_f:
+                    json.dump(vars(args), config_f, indent=2)
             if iteration % args.val_every == 0:
                 val_loss = eval_model(model, loss_func, val_data, epoch)
-                tb.add_scalar("val_loss", val_loss, iteration)
+                tb.add_scalar("model_%d val_loss" % model_id, val_loss, iteration)
                 if val_loss > cur_worse:
                     cur_worse = val_loss
                     bad_times += 1
@@ -142,7 +141,7 @@ def train(args):
                     print('Early Stop !!!!')
                     exit(0)
             if iteration % args.loss_log_every == 0:
-                tb.add_scalar("train_loss", loss.item(), iteration)
+                tb.add_scalar("model_%d train_loss" % model_id, loss.item(), iteration)
 
     print("The train finished")
 
@@ -151,6 +150,11 @@ if __name__ == '__main__':
     args = parse_args()
     # with open(os.path.join(args.checkpoint_path, "config.json"), 'w', encoding='utf-8') as config_f:
     #     json.dump(vars(args), config_f)
-    train(args)
+    if not os.path.exists(os.path.join(args.checkpoint_path, str(args.class_id))):
+        os.makedirs(os.path.join(args.checkpoint_path, str(args.class_id)))
+    sw = SummaryWriter(os.path.join(args.checkpoint_path, str(args.class_id)))
+    for i in range(args.model_num):
+        print("==========================Start training the %d class %dth model===============" % (args.class_id, i))
+        train(args, i, sw)
 
 

@@ -19,6 +19,7 @@ class MultiBceLoss(nn.Module):
         self.loss = nn.BCELoss()
 
     def forward(self, pre, label):
+        pre = pre.squeeze()
         assert pre.shape == label.shape
         return self.loss(pre, label)
 
