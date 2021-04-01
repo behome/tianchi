@@ -25,7 +25,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data input settings
-    parser.add_argument('--train_data', type=str, default='./tc_data/track1_round1_train_20210222_train.csv',
+    parser.add_argument('--train_data', type=str, default='./tc_data/track1_round1_train_20210222.csv',
                         help='the path to the directory containing the train data.')
     parser.add_argument("--val_data", type=str, default='./tc_data/track1_round1_train_20210222_val.csv',
                         help='the path to the directory containing the validation data.')
@@ -40,12 +40,13 @@ def parse_args():
     parser.add_argument("--hidden_size", type=int, default=256, help="the size of the hidden layer")
     parser.add_argument("--conv_hidden", type=int, default=100, help="the output channel of the conv")
     parser.add_argument("--output_classes", type=int, default=1, help="the classes of the output")
-    parser.add_argument("--lstm_layer", type=int, default=2, help="the number of the lstm layer")
-    parser.add_argument("--batch_size", type=int, default=64, help="the size of one batch")
+    parser.add_argument("--lstm_layer", type=int, default=1, help="the number of the lstm layer")
+    parser.add_argument("--batch_size", type=int, default=128, help="the size of one batch")
     parser.add_argument("--dropout", type=float, default=0.5, help="the probability to set one unit to zero")
     parser.add_argument("--bn", type=int, default=0, help="option about whether to use bn layer")
     parser.add_argument("--checkpoint_path", type=str, default="./user_data/model_data/lstm",
                         help="the path to save model and tensorboard data")
+    parser.add_argument("--sample_every", type=int, default=30, help='the period to resample negative data')
     parser.add_argument('--seed', type=int, default=9233, help='.')
     parser.add_argument('--optim', type=str, default='Adam', help='the type of the optimizer.')
     parser.add_argument('--lr', type=float, default=1e-3, help='the learning rate for the visual extractor.')
@@ -56,7 +57,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=100, help="the epoch to train model")
     parser.add_argument("--num_workers", type=int, default=1, help="the number of the process to read data")
     parser.add_argument("--max_length", type=int, default=100, help="the max length of the report sentence")
-    parser.add_argument("--mlp_units", type=list, default=[256, ], help="The hidden units of the output layer")
+    parser.add_argument("--mlp_units", type=list, default=[], help="The hidden units of the output layer")
     parser.add_argument("--model_type", type=str, default="lstm", help="The type model to use")
     parser.add_argument("--device", type=int, default=0, help="the gpu device to run training")
     parser.add_argument("--print_every", type=int, default=20, help="the period to print loss")
@@ -112,6 +113,8 @@ def train(args, model_id, tb):
             decay_factor = args.decay_rate ** factor
             current_lr = args.lr * decay_factor
             utils.set_lr(optimizer, current_lr)
+        # if epoch != 0 and epoch % args.sample_every == 0:
+        #     train_data.re_sample()
         for i, data in enumerate(train_data):
             tmp = [_.cuda(args.device) if isinstance(_, torch.Tensor) else _ for _ in data]
             report_ids, sentence_ids, sentence_lengths, output_vec = tmp
@@ -132,6 +135,7 @@ def train(args, model_id, tb):
                 val_loss = eval_model(model, loss_func, val_data, epoch)
                 tb.add_scalar("model_%d val_loss" % model_id, val_loss, iteration)
                 if val_loss > cur_worse:
+                    print("Bad Time Appear")
                     cur_worse = val_loss
                     bad_times += 1
                 else:

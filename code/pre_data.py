@@ -90,6 +90,6 @@ def split_train_val(origin_path, val_num):
 if __name__ == '__main__':
     # max_id = get_vocab('../tc_data/track1_round1_train_20210222.csv')
     # print(max_id)
-    show_classes('../tc_data/track1_round1_train_20210222.csv')
-    # split_train_val('../tc_data/track1_round1_train_20210222.csv', 2000)
+    # show_classes('../tc_data/track1_round1_train_20210222.csv')
+    split_train_val('../tc_data/track1_round1_train_20210222.csv', 2000)
 

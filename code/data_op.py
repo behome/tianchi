@@ -59,11 +59,8 @@ class MedicalDatasetEasyEnsemble(Dataset):
                 self.positive_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 1})
             else:
                 self.negative_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 0})
-        sample_negative_index = np.random.choice(len(self.negative_corpus), len(self.positive_corpus))
-        self.sample_negative_corpus = [self.negative_corpus[index] for index in sample_negative_index]
-        self.corpus = self.positive_corpus + self.sample_negative_corpus
-        print("++++++++After sampling total number of corpus is %d+++++++++" % len(self.corpus))
-        np.random.shuffle(self.corpus)
+        self.corpus = []
+        self.re_sample()
 
     def __getitem__(self, index):
         item = self.corpus[index]
@@ -72,6 +69,13 @@ class MedicalDatasetEasyEnsemble(Dataset):
         report_length = len(report_txt)
         label = item['label']
         return report_id, report_txt, report_length, label
+
+    def re_sample(self):
+        sample_negative_index = np.random.choice(len(self.negative_corpus), len(self.positive_corpus))
+        sample_negative_corpus = [self.negative_corpus[index] for index in sample_negative_index]
+        self.corpus = self.positive_corpus + sample_negative_corpus
+        print("++++++++After sampling total number of corpus is %d+++++++++" % len(self.corpus))
+        np.random.shuffle(self.corpus)
 
     def __len__(self):
         return len(self.corpus)
@@ -163,6 +167,9 @@ class MedicalEasyEnsembleDataloader(DataLoader):
         txt_ids = torch.from_numpy(txt_ids)
         report_lengths = torch.Tensor(report_lengths)
         return report_ids, txt_ids, report_lengths, label
+
+    def re_sample(self):
+        self.dataset.re_sample()
 
 
 if __name__ == '__main__':
