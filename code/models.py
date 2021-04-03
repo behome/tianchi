@@ -15,13 +15,19 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 class BaseModel(nn.Module):
 
-    def __init__(self, args):
+    def __init__(self, args, embedding=None):
         super(BaseModel, self).__init__()
         self.args = args
-        self.embed = nn.Sequential(
-            nn.Embedding(args.vocab_size, args.embedding_size, padding_idx=0),
-            nn.Dropout(args.dropout)
-        )
+        if embedding is not None:
+            self.embed = nn.Sequential(
+                nn.Embedding.from_pretrained(embedding),
+                nn.Dropout(args.dropout)
+            )
+        else:
+            self.embed = nn.Sequential(
+                nn.Embedding(args.vocab_size, args.embedding_size, padding_idx=0),
+                nn.Dropout(args.dropout)
+            )
 
     def init_weight(self):
         for m in self.modules():
@@ -35,21 +41,30 @@ class BaseModel(nn.Module):
     def forward(self, sentence_ids, sentence_lengths):
         raise NotImplementedError
 
-    def make_output_layer(self):
-        raise NotImplementedError
+    def make_output_layer(self, last_units):
+        layers = []
+        for i, units in enumerate(self.args.mlp_units):
+            layers.append(nn.Linear(last_units, units))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(self.args.dropout))
+            last_units = units
+        layers.append(nn.Linear(last_units, self.args.output_classes))
+        layers.append(nn.Sigmoid())
+        return nn.Sequential(*layers)
 
 
 class LSTMModel(BaseModel):
 
-    def __init__(self, args):
-        super(LSTMModel, self).__init__(args)
+    def __init__(self, args, embedding=None):
+        super(LSTMModel, self).__init__(args, embedding)
         self.lstm = nn.LSTM(input_size=args.embedding_size,
                             hidden_size=args.hidden_size,
                             num_layers=args.lstm_layer,
                             dropout=args.dropout,
                             batch_first=True,
                             bidirectional=args.bi)
-        self.output_layer = self.make_output_layer()
+        last_units = self.args.hidden_size * 2 if self.args.bi else self.args.hidden_size
+        self.output_layer = self.make_output_layer(last_units)
 
     def forward(self, sentence_ids, sentence_lengths):
         sentence_embed = self.embed(sentence_ids)
@@ -57,29 +72,21 @@ class LSTMModel(BaseModel):
                                                       enforce_sorted=False)
         packed_sentence_h, (hidden, cell) = self.lstm(packed_sentence_embeds)
         # sentence_h, _ = pad_packed_sequence(packed_sentence_h, batch_first=True)
-        hidden = torch.cat([hidden[-2, :, :], hidden[-1, :, :]], dim=-1)
+        if self.args.bi:
+            hidden = torch.cat([hidden[-2, :, :], hidden[-1, :, :]], dim=-1)
+        else:
+            hidden = hidden[-1, :, :]
         pre = self.output_layer(hidden)
         return pre
-
-    def make_output_layer(self):
-        layers = []
-        last_units = self.args.hidden_size * 2 if self.args.bi else self.args.hidden_size
-        for i, units in enumerate(self.args.mlp_units):
-            layers.append(nn.Linear(last_units, units))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(self.args.dropout))
-            last_units = units
-        layers.append(nn.Linear(last_units, self.args.output_classes))
-        layers.append(nn.Sigmoid())
-        return nn.Sequential(*layers)
 
 
 class ConvModel(BaseModel):
 
-    def __init__(self, args):
-        super(ConvModel, self).__init__(args)
-        self.convs = nn.ModuleList([nn.Conv1d(args.embedding_size, args.conv_hidden, i) for i in range(3, 6)])
-        self.output_layer = self.make_output_layer()
+    def __init__(self, args, embedding=None):
+        super(ConvModel, self).__init__(args, embedding)
+        self.convs = nn.ModuleList([nn.Conv1d(args.embedding_size, args.conv_hidden, i) for i in range(3, 5)])
+        last_units = self.args.conv_hidden * 2
+        self.output_layer = self.make_output_layer(last_units)
 
     def forward(self, sentence_ids, sentence_lengths):
         sentence_embed = self.embed(sentence_ids).transpose(1, 2)
@@ -87,14 +94,30 @@ class ConvModel(BaseModel):
         pre = self.output_layer(conv_out)
         return pre
 
-    def make_output_layer(self):
-        layers = []
-        last_units = self.args.conv_hidden * 3
-        for i, units in enumerate(self.args.mlp_units):
-            layers.append(nn.Linear(last_units, units))
-            layers.append(nn.ReLU())
-            layers.append(nn.Dropout(self.args.dropout))
-            last_units = units
-        layers.append(nn.Linear(last_units, self.args.output_classes))
-        layers.append(nn.Sigmoid())
-        return nn.Sequential(*layers)
+
+class CharCNNModel(BaseModel):
+
+    def __init__(self, args, embedding=None):
+        super(CharCNNModel, self).__init__(args, embedding)
+        self.convs = nn.Sequential(
+            nn.Conv1d(self.args.embedding_size, self.args.conv_hidden, 1),
+            nn.BatchNorm1d(self.args.conv_hidden),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=3, stride=1),
+            nn.Conv1d(self.args.conv_hidden, self.args.conv_hidden, 3, dilation=2),
+            nn.BatchNorm1d(self.args.conv_hidden),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=3, stride=1),
+            nn.Conv1d(self.args.conv_hidden, self.args.conv_hidden, 3, dilation=4),
+            nn.BatchNorm1d(self.args.conv_hidden),
+            nn.ReLU(),
+            nn.MaxPool1d(kernel_size=3, stride=1),
+        )
+        last_units = self.args.conv_hidden
+        self.output_layer = self.make_output_layer(last_units)
+
+    def forward(self, sentence_ids, sentence_lengths):
+        sentence_embed = self.embed(sentence_ids).transpose(1, 2)
+        conv_out = self.convs(sentence_embed).max(dim=2)[0]
+        pre = self.output_layer(conv_out)
+        return pre

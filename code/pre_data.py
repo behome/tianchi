@@ -58,15 +58,6 @@ def show_classes(training_path):
     plt.show()
 
 
-def split_17_classes(origin_path):
-    with open(origin_path, 'r') as fin:
-        lines = fin.readlines()
-    for line in lines:
-        report_id, txt, c = line.strip('\n').split('|,|')
-
-    pass
-
-
 def split_train_val(origin_path, val_num):
     with open(origin_path, 'r') as fin:
         lines = fin.readlines()
@@ -87,9 +78,27 @@ def split_train_val(origin_path, val_num):
         fout.writelines(val_data)
 
 
+def show_term_frequency(data_path):
+    with open(data_path, 'r') as fin:
+        lines = fin.readlines()
+    term_counter = Counter()
+    for line in lines:
+        report_id, txt, c = line.strip('\n').split('|,|')
+        txt_ids = [int(ids) for ids in txt.split(' ') if ids.strip() != '']
+        for ids in txt_ids:
+            term_counter[ids] += 1
+    num_keys = sorted(list(term_counter.keys()))
+    plt.figure()
+    plt.bar(x=num_keys, height=[term_counter.get(key) for key in num_keys])
+    # plt.xticks(num_keys)
+    plt.show()
+    print("Minimum frequency %d" % min(term_counter.values()))
+
+
 if __name__ == '__main__':
     # max_id = get_vocab('../tc_data/track1_round1_train_20210222.csv')
     # print(max_id)
     # show_classes('../tc_data/track1_round1_train_20210222.csv')
-    split_train_val('../tc_data/track1_round1_train_20210222.csv', 2000)
+    # split_train_val('../tc_data/track1_round1_train_20210222.csv', 2000)
+    show_term_frequency('../tc_data/track1_round1_train_20210222.csv')
 

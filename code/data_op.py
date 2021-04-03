@@ -20,7 +20,7 @@ class MedicalDataset(Dataset):
         self.corpus = []
         for line in lines:
             report_id, txt, classes = line.strip('\n').split('|,|')
-            txt_ids = [int(ids) for ids in txt.split(' ') if len(ids.strip()) > 0]
+            txt_ids = [int(ids) + 1 for ids in txt.split(' ') if len(ids.strip()) > 0]
             classes = [int(class_id) for class_id in classes.split(' ') if len(class_id.strip()) > 0]
             self.corpus.append({'report_id': report_id, 'txt': txt_ids, 'classes': classes})
         self.num_class = num_class
@@ -53,7 +53,7 @@ class MedicalDatasetEasyEnsemble(Dataset):
         self.negative_corpus = []
         for line in lines:
             report_id, txt, classes = line.strip('\n').split('|,|')
-            txt_ids = [int(ids) for ids in txt.split(' ') if len(ids.strip()) > 0]
+            txt_ids = [int(ids) + 1 for ids in txt.split(' ') if len(ids.strip()) > 0]
             classes = [int(class_id) for class_id in classes.split(' ') if len(class_id.strip()) > 0]
             if self.class_id in classes:
                 self.positive_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 1})
@@ -90,7 +90,7 @@ class MedicalTestDataset(Dataset):
         self.corpus = []
         for line in lines:
             report_id, txt = line.strip('\n').split('|,|')
-            txt_ids = [int(ids) for ids in txt.split(' ') if len(ids.strip()) > 0]
+            txt_ids = [int(ids) + 1 for ids in txt.split(' ') if len(ids.strip()) > 0]
             self.corpus.append({'report_id': report_id, 'txt': txt_ids})
         self.max_length = max_length
 

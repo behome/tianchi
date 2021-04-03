@@ -10,7 +10,10 @@
 import os
 import torch
 import numpy as np
+import pickle
 from transformers import BertModel, BertTokenizer
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.feature_extraction.text import CountVectorizer
 
 
 def extract_bert_embedd(bert_path, vocab_name, data_path, feature_path, label_path):
@@ -32,6 +35,38 @@ def extract_bert_embedd(bert_path, vocab_name, data_path, feature_path, label_pa
     np.save(feature_path, np.array(vectors, dtype=np.float32))
     with open(label_path, 'w', encoding='utf-8') as fout:
         fout.writelines('\n'.join(labels))
+
+
+class SimpleFeature:
+
+    def __init__(self, resume=False, vocab_path=None, tfidf_path=None):
+        if resume and (vocab_path is None or tfidf_path is None):
+            raise ValueError("The vocabulary path is None")
+        self.resume = resume
+        if resume:
+            self.vectorizer = CountVectorizer(vocabulary=pickle.load(open(vocab_path, 'rb')))
+            self.tfidf = pickle.load(open(tfidf_path, 'rb'))
+        else:
+            self.vectorizer = CountVectorizer()
+            self.tfidf = TfidfTransformer()
+
+    def get_train_feature(self, corpus, save=True, vocab_path=None, tfidf_path=None):
+        if save and vocab_path is None:
+            raise ValueError("The vocabulary path is None")
+        vec = self.vectorizer.fit_transform(corpus)
+        with open(vocab_path, 'wb') as fw:
+            pickle.dump(self.vectorizer.vocabulary_, fw)
+        tfidf = self.tfidf.fit_transform(vec)
+        with open(tfidf_path, 'wb') as fw:
+            pickle.dump(self.tfidf, fw)
+        return vec.toarray(), tfidf.toarray()
+
+    def get_tf_idf(self, content):
+        bow = self.vectorizer.transform(content)
+        return self.tfidf.transform(bow).toarray()
+
+    def get_bow(self, content):
+        return self.vectorizer.transform(content).toarray()
 
 
 if __name__ == '__main__':

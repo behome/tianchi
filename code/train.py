@@ -21,11 +21,20 @@ from losses import MultiWeightedBCELoss, MultiBceLoss
 import utils as utils
 
 
+def str2bool(v):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Unsupported value encountered.')
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
 
     # Data input settings
-    parser.add_argument('--train_data', type=str, default='./tc_data/track1_round1_train_20210222.csv',
+    parser.add_argument('--train_data', type=str, default='./tc_data/track1_round1_train_20210222_train.csv',
                         help='the path to the directory containing the train data.')
     parser.add_argument("--val_data", type=str, default='./tc_data/track1_round1_train_20210222_val.csv',
                         help='the path to the directory containing the validation data.')
@@ -35,8 +44,10 @@ def parse_args():
                         help="the weight about every class")
     parser.add_argument("--class_id", type=int, default=0, help='the class id to train model')
     parser.add_argument("--model_num", type=int, default=4, help='the number model will be trained for current class')
-    parser.add_argument("--vocab_size", type=int, default=858, help="the size of the vocabulary")
+    parser.add_argument("--vocab_size", type=int, default=859, help="the size of the vocabulary")
     parser.add_argument("--embedding_size", type=int, default=256, help="the size of the word embedding")
+    parser.add_argument("--w2v_file", type=str, default='./user_data/model_data/word2vec.256d.858.bin',
+                        help='pretrained embedding')
     parser.add_argument("--hidden_size", type=int, default=256, help="the size of the hidden layer")
     parser.add_argument("--conv_hidden", type=int, default=100, help="the output channel of the conv")
     parser.add_argument("--output_classes", type=int, default=1, help="the classes of the output")
@@ -62,11 +73,11 @@ def parse_args():
     parser.add_argument("--device", type=int, default=0, help="the gpu device to run training")
     parser.add_argument("--print_every", type=int, default=20, help="the period to print loss")
     parser.add_argument("--save_every", type=int, default=100, help="the period to save model")
-    parser.add_argument("--val_every", type=int, default=400, help="the period to validate model")
+    parser.add_argument("--val_every", type=int, default=100, help="the period to validate model")
     parser.add_argument("--loss_log_every", type=int, default=200, help="the period to log loss")
     parser.add_argument("--patient", type=int, default=5, help='the patient to early stop')
-    parser.add_argument("--bi", type=bool, default=True, help="whether to use bilstm")
-    parser.add_argument('--amsgrad', type=bool, default=True, help='.')
+    parser.add_argument("--bi", type=str2bool, default=True, help="whether to use bilstm")
+    parser.add_argument('--amsgrad', type=str2bool, default=True, help='.')
     args = parser.parse_args()
     return args
 
@@ -91,10 +102,16 @@ def train(args, model_id, tb):
     np.random.seed(args.seed)
     train_data = MedicalEasyEnsembleDataloader(args.train_data, args.class_id, args.batch_size, True, args.num_workers)
     val_data = MedicalEasyEnsembleDataloader(args.val_data, args.class_id, args.batch_size, False, args.num_workers)
+    if os.path.exists(args.w2v_file):
+        embedding = utils.load_embedding(args.w2v_file, vocab_size=args.vocab_size, embedding_size=args.embedding_size)
+    else:
+        embedding = None
     if args.model_type == 'lstm':
-        model = models.LSTMModel(args)
+        model = models.LSTMModel(args, embedding)
     elif args.model_type == 'conv':
-        model = models.ConvModel(args)
+        model = models.ConvModel(args, embedding)
+    elif args.model_type == 'char':
+        model = models.CharCNNModel(args, embedding)
     else:
         raise NotImplementedError
     if os.path.isfile(os.path.join(args.checkpoint_path, str(args.class_id), "model_%d.pth" % model_id)):
@@ -136,14 +153,13 @@ def train(args, model_id, tb):
                 tb.add_scalar("model_%d val_loss" % model_id, val_loss, iteration)
                 if val_loss > cur_worse:
                     print("Bad Time Appear")
-                    cur_worse = val_loss
                     bad_times += 1
                 else:
                     cur_worse = val_loss
                     bad_times = 0
                 if bad_times > args.patient:
                     print('Early Stop !!!!')
-                    exit(0)
+                    return
             if iteration % args.loss_log_every == 0:
                 tb.add_scalar("model_%d train_loss" % model_id, loss.item(), iteration)
 
