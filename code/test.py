@@ -56,9 +56,14 @@ def load_all_model(root_dir, device=0):
                 model = models.LSTMModel(args)
             elif args.model_type == 'conv':
                 model = models.ConvModel(args)
+            elif args.model_type == 'char':
+                model = models.CharCNNModel(args)
+            elif args.model_type == 'base':
+                model = models.BaseModel(args)
             else:
                 raise NotImplementedError
-            model_path = os.path.join(args.checkpoint_path, str(i), "model_%d.pth" % j)
+            model_path = os.path.join(args.checkpoint_path, str(i), "%s_%s" % (args.model_type, args.type_suffix),
+                                      "model_%d.pth" % j)
             if not os.path.isfile(model_path):
                 print("No model to test")
                 exit(1)
@@ -72,7 +77,7 @@ def load_all_model(root_dir, device=0):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root_dir", type=str, default='./user_data/model_data/lstm',
+    parser.add_argument("--root_dir", type=str, default='./user_data/model_data/',
                         help='the model root about the model')
     parser.add_argument("--test_data", type=str, default='./tc_data/track1_round1_testA_20210222.csv')
     parser.add_argument("--batch_size", type=int, default=64, help="The batch size to predict")

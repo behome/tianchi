@@ -95,10 +95,41 @@ def show_term_frequency(data_path):
     print("Minimum frequency %d" % min(term_counter.values()))
 
 
+def show_co_occurrence(data_path):
+    with open(data_path, 'r') as fin:
+        lines = fin.readlines()
+    heap = np.zeros((17, 17))
+    classes_counter = Counter()
+    for line in lines:
+        report_id, txt, c = line.strip('\n').split('|,|')
+        c_ids = [int(ids) for ids in c.split(' ') if ids.strip() != '']
+        for i in c_ids:
+            classes_counter[i] += 1
+            for j in c_ids:
+                if i != j:
+                    heap[i, j] += 1
+    for i in range(heap.shape[0]):
+        heap[i] /= classes_counter[i]
+    print(heap)
+    np.save("../tc_data/co_occur_norm.npy", heap)
+    fig, ax = plt.subplots()
+    im = ax.imshow(heap)
+    cbar = ax.figure.colorbar(im, ax=ax)
+    # We want to show all ticks...
+    ax.set_xticks(np.arange(heap.shape[1]))
+    ax.set_yticks(np.arange(heap.shape[0]))
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+             rotation_mode="anchor")
+    ax.set_title("Co-occurrence Heap")
+    fig.tight_layout()
+    plt.show()
+
+
 if __name__ == '__main__':
     # max_id = get_vocab('../tc_data/track1_round1_train_20210222.csv')
     # print(max_id)
     # show_classes('../tc_data/track1_round1_train_20210222.csv')
     # split_train_val('../tc_data/track1_round1_train_20210222.csv', 2000)
-    show_term_frequency('../tc_data/track1_round1_train_20210222.csv')
+    # show_term_frequency('../tc_data/track1_round1_train_20210222.csv')
+    show_co_occurrence('../tc_data/track1_round1_train_20210222.csv')
 

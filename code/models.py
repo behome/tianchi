@@ -10,12 +10,12 @@
 import torch
 from torch import nn
 from torch.nn import init
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pack_padded_sequence
 
 
 class BaseModel(nn.Module):
 
-    def __init__(self, args, embedding=None):
+    def __init__(self, args, embedding=None, co_occur=None):
         super(BaseModel, self).__init__()
         self.args = args
         if embedding is not None:
@@ -28,6 +28,7 @@ class BaseModel(nn.Module):
                 nn.Embedding(args.vocab_size, args.embedding_size, padding_idx=0),
                 nn.Dropout(args.dropout)
             )
+        self.output_layer = self.make_output_layer(args.embedding_size, co_occur)
 
     def init_weight(self):
         for m in self.modules():
@@ -39,9 +40,12 @@ class BaseModel(nn.Module):
                     init.constant_(m.bias, 0)
 
     def forward(self, sentence_ids, sentence_lengths):
-        raise NotImplementedError
+        sentence_embed = self.embed(sentence_ids)
+        sentence_vec = sentence_embed.sum(1) / sentence_lengths.unsqueeze(1)
+        pre = self.output_layer(sentence_vec)
+        return pre
 
-    def make_output_layer(self, last_units):
+    def make_output_layer(self, last_units, co_occur):
         layers = []
         for i, units in enumerate(self.args.mlp_units):
             layers.append(nn.Linear(last_units, units))
@@ -84,8 +88,8 @@ class ConvModel(BaseModel):
 
     def __init__(self, args, embedding=None):
         super(ConvModel, self).__init__(args, embedding)
-        self.convs = nn.ModuleList([nn.Conv1d(args.embedding_size, args.conv_hidden, i) for i in range(3, 5)])
-        last_units = self.args.conv_hidden * 2
+        self.convs = nn.ModuleList([nn.Conv1d(args.embedding_size, args.conv_hidden, i) for i in range(3, 4)])
+        last_units = self.args.conv_hidden
         self.output_layer = self.make_output_layer(last_units)
 
     def forward(self, sentence_ids, sentence_lengths):
@@ -121,3 +125,7 @@ class CharCNNModel(BaseModel):
         conv_out = self.convs(sentence_embed).max(dim=2)[0]
         pre = self.output_layer(conv_out)
         return pre
+
+
+
+

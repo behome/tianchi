@@ -39,3 +39,21 @@ class MultiWeightedBCELoss(nn.Module):
         assert (not math.isnan(loss.item())
                 and not math.isinf(loss.item()))
         return loss
+
+
+class PRMetric(nn.Module):
+
+    def __init__(self, threshold=0.5):
+        super(PRMetric, self).__init__()
+        self.threshold = threshold
+
+    def forward(self, pre, label):
+        if pre.shape != label.shape:
+            pre = pre.squeeze()
+        assert pre.shape == label.shape
+        pre_results = torch.where(pre > self.threshold, 1, 0)
+        correct_positive = (pre_results == label) & (label == 1)
+        p = correct_positive.sum() / pre_results.sum()
+        r = correct_positive.sum() / label.sum()
+        return p, r
+

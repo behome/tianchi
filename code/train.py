@@ -55,13 +55,13 @@ def parse_args():
     parser.add_argument("--batch_size", type=int, default=128, help="the size of one batch")
     parser.add_argument("--dropout", type=float, default=0.5, help="the probability to set one unit to zero")
     parser.add_argument("--bn", type=int, default=0, help="option about whether to use bn layer")
-    parser.add_argument("--checkpoint_path", type=str, default="./user_data/model_data/lstm",
+    parser.add_argument("--checkpoint_path", type=str, default="./user_data/model_data/",
                         help="the path to save model and tensorboard data")
     parser.add_argument("--sample_every", type=int, default=30, help='the period to resample negative data')
     parser.add_argument('--seed', type=int, default=9233, help='.')
     parser.add_argument('--optim', type=str, default='Adam', help='the type of the optimizer.')
     parser.add_argument('--lr', type=float, default=1e-3, help='the learning rate for the visual extractor.')
-    parser.add_argument('--weight_decay', type=float, default=5e-5, help='the weight decay.')
+    parser.add_argument('--weight_decay', type=float, default=1e-4, help='the weight decay.')
     parser.add_argument("--start_epoch", type=int, default=10, help="the epoch to start train")
     parser.add_argument("--decay_every", type=int, default=5, help='the lr will decay per ')
     parser.add_argument("--decay_rate", type=float, default=0.8, help="the rate to decay lr")
@@ -69,13 +69,17 @@ def parse_args():
     parser.add_argument("--num_workers", type=int, default=1, help="the number of the process to read data")
     parser.add_argument("--max_length", type=int, default=100, help="the max length of the report sentence")
     parser.add_argument("--mlp_units", type=list, default=[], help="The hidden units of the output layer")
-    parser.add_argument("--model_type", type=str, default="lstm", help="The type model to use")
+    parser.add_argument("--model_type", type=str, default="char", help="The type model to use")
+    parser.add_argument("--type_suffix", type=str, default="",
+                        help="a suffix about this model type to distinguish each training")
     parser.add_argument("--device", type=int, default=0, help="the gpu device to run training")
     parser.add_argument("--print_every", type=int, default=20, help="the period to print loss")
     parser.add_argument("--save_every", type=int, default=100, help="the period to save model")
     parser.add_argument("--val_every", type=int, default=100, help="the period to validate model")
     parser.add_argument("--loss_log_every", type=int, default=200, help="the period to log loss")
     parser.add_argument("--patient", type=int, default=5, help='the patient to early stop')
+    parser.add_argument("--threshold", type=int, default=0.5,
+                        help='the threshold to determine the positive and negative')
     parser.add_argument("--bi", type=str2bool, default=True, help="whether to use bilstm")
     parser.add_argument('--amsgrad', type=str2bool, default=True, help='.')
     args = parser.parse_args()
@@ -89,9 +93,10 @@ def eval_model(model, loss_func, val_data, epoch):
     for i, data in enumerate(val_data):
         tmp = [_.cuda(args.device) if isinstance(_, torch.Tensor) else _ for _ in data]
         report_ids, sentence_ids, sentence_lengths, output_vec = tmp
-        loss = loss_func(model(sentence_ids, sentence_lengths), output_vec)
+        pre = model(sentence_ids, sentence_lengths)
+        loss = loss_func(pre, output_vec)
+        print("val %d iter\t %d epoch\t: loss %.3f\t" % (i, epoch, loss.item()))
         val_num += 1
-        print("val iter %d epoch %d loss: %.3f" % (i, epoch, loss.item()))
         val_loss += loss.item()
     model.train()
     return val_loss / val_num
@@ -112,11 +117,16 @@ def train(args, model_id, tb):
         model = models.ConvModel(args, embedding)
     elif args.model_type == 'char':
         model = models.CharCNNModel(args, embedding)
+    elif args.model_type == 'base':
+        model = models.BaseModel(args, embedding)
     else:
         raise NotImplementedError
-    if os.path.isfile(os.path.join(args.checkpoint_path, str(args.class_id), "model_%d.pth" % model_id)):
-        print("Load %d class %dth model from previous step" % (args.class_id, model_id))
-        model.load_state_dict(torch.load(os.path.join(args.checkpoint_path, str(args.class_id), "model_%d.pth" % model_id)))
+    if os.path.isfile(os.path.join(args.checkpoint_path, str(args.class_id),
+                                   "%s_%s" % (args.model_type, args.type_suffix), "model_%d.pth" % model_id)):
+        print("Load %d class %s type %dth model from previous step" % (args.class_id, args.model_type, model_id))
+        model.load_state_dict(torch.load(os.path.join(args.checkpoint_path, str(args.class_id),
+                                                      "%s_%s" % (args.model_type, args.type_suffix),
+                                                      "model_%d.pth" % model_id)))
     iteration = 0
     model = model.cuda(args.device)
     model.train()
@@ -145,14 +155,21 @@ def train(args, model_id, tb):
                 print("iter %d epoch %d loss: %.3f" % (iteration, epoch, train_loss))
 
             if iteration % args.save_every == 0:
-                torch.save(model.state_dict(), os.path.join(args.checkpoint_path, str(args.class_id), "model_%d.pth" % model_id))
+                torch.save(model.state_dict(), os.path.join(args.checkpoint_path, str(args.class_id),
+                                                            "%s_%s" % (args.model_type, args.type_suffix),
+                                                            "model_%d.pth" % model_id))
                 with open(os.path.join(args.checkpoint_path, str(args.class_id), "config.json"), 'w', encoding='utf-8') as config_f:
+                    json.dump(vars(args), config_f, indent=2)
+                with open(os.path.join(args.checkpoint_path, str(args.class_id),
+                                       "%s_%s" % (args.model_type, args.type_suffix), "config.json"), 'w',
+                          encoding='utf-8') as config_f:
                     json.dump(vars(args), config_f, indent=2)
             if iteration % args.val_every == 0:
                 val_loss = eval_model(model, loss_func, val_data, epoch)
                 tb.add_scalar("model_%d val_loss" % model_id, val_loss, iteration)
                 if val_loss > cur_worse:
                     print("Bad Time Appear")
+                    cur_worse = val_loss
                     bad_times += 1
                 else:
                     cur_worse = val_loss
@@ -170,9 +187,12 @@ if __name__ == '__main__':
     args = parse_args()
     # with open(os.path.join(args.checkpoint_path, "config.json"), 'w', encoding='utf-8') as config_f:
     #     json.dump(vars(args), config_f)
-    if not os.path.exists(os.path.join(args.checkpoint_path, str(args.class_id))):
-        os.makedirs(os.path.join(args.checkpoint_path, str(args.class_id)))
-    sw = SummaryWriter(os.path.join(args.checkpoint_path, str(args.class_id)))
+    if not os.path.exists(os.path.join(args.checkpoint_path, str(args.class_id),
+                                       "%s_%s" % (args.model_type, args.type_suffix),)):
+        os.makedirs(os.path.join(args.checkpoint_path, str(args.class_id),
+                                 "%s_%s" % (args.model_type, args.type_suffix),))
+    sw = SummaryWriter(os.path.join(args.checkpoint_path, str(args.class_id),
+                                    "%s_%s" % (args.model_type, args.type_suffix),))
     for i in range(args.model_num):
         print("==========================Start training the %d class %dth model===============" % (args.class_id, i))
         train(args, i, sw)
