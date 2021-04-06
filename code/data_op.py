@@ -56,9 +56,9 @@ class MedicalDatasetEasyEnsemble(Dataset):
             txt_ids = [int(ids) + 1 for ids in txt.split(' ') if len(ids.strip()) > 0]
             classes = [int(class_id) for class_id in classes.split(' ') if len(class_id.strip()) > 0]
             if self.class_id in classes:
-                self.positive_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 1})
+                self.positive_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 1, 'classes': classes})
             else:
-                self.negative_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 0})
+                self.negative_corpus.append({'report_id': report_id, 'txt': txt_ids, 'label': 0, 'classes': classes})
         self.corpus = []
         self.re_sample()
 
@@ -68,7 +68,11 @@ class MedicalDatasetEasyEnsemble(Dataset):
         report_txt = item['txt']
         report_length = len(report_txt)
         label = item['label']
-        return report_id, report_txt, report_length, label
+        classes = item['classes']
+        class_vec = np.zeros((17,))
+        for class_id in classes:
+            class_vec[class_id] = 1.0
+        return report_id, report_txt, report_length, label, class_vec
 
     def re_sample(self):
         sample_negative_index = np.random.choice(len(self.negative_corpus), len(self.positive_corpus))
@@ -158,15 +162,16 @@ class MedicalEasyEnsembleDataloader(DataLoader):
 
     @staticmethod
     def collate_fn(data):
-        report_ids, report_txt, report_lengths, label = zip(*data)
+        report_ids, report_txt, report_lengths, label, class_vec = zip(*data)
         max_length = max(report_lengths)
         txt_ids = np.zeros((len(report_ids), max_length), dtype=int)
         for i, txt_id in enumerate(report_txt):
             txt_ids[i, :len(txt_id)] = txt_id
+        class_vec = torch.Tensor(class_vec)
         label = torch.Tensor(label)
         txt_ids = torch.from_numpy(txt_ids)
         report_lengths = torch.Tensor(report_lengths)
-        return report_ids, txt_ids, report_lengths, label
+        return report_ids, txt_ids, report_lengths, label, class_vec
 
     def re_sample(self):
         self.dataset.re_sample()

@@ -10,9 +10,9 @@ import torch
 import gensim
 
 
-def build_optimizer(args, model):
+def build_optimizer(args, param):
     optimizer = getattr(torch.optim, args.optim)(
-        model.parameters(),
+        param,
         lr=args.lr,
         weight_decay=args.weight_decay,
         amsgrad=args.amsgrad
