@@ -39,22 +39,22 @@ def extract_bert_embedd(bert_path, vocab_name, data_path, feature_path, label_pa
 
 class SimpleFeature:
 
-    def __init__(self, resume=False, vocab_path=None, tfidf_path=None):
-        if resume and (vocab_path is None or tfidf_path is None):
+    def __init__(self, resume=False, cbow_path=None, tfidf_path=None):
+        if resume and (cbow_path is None or tfidf_path is None):
             raise ValueError("The vocabulary path is None")
         self.resume = resume
         if resume:
-            self.vectorizer = CountVectorizer(vocabulary=pickle.load(open(vocab_path, 'rb')))
+            self.vectorizer = CountVectorizer(vocabulary=pickle.load(open(cbow_path, 'rb')))
             self.tfidf = pickle.load(open(tfidf_path, 'rb'))
         else:
             self.vectorizer = CountVectorizer()
             self.tfidf = TfidfTransformer()
 
-    def get_train_feature(self, corpus, save=True, vocab_path=None, tfidf_path=None):
-        if save and vocab_path is None:
+    def get_train_feature(self, corpus, save=True, cbow_path=None, tfidf_path=None):
+        if save and cbow_path is None:
             raise ValueError("The vocabulary path is None")
         vec = self.vectorizer.fit_transform(corpus)
-        with open(vocab_path, 'wb') as fw:
+        with open(cbow_path, 'wb') as fw:
             pickle.dump(self.vectorizer.vocabulary_, fw)
         tfidf = self.tfidf.fit_transform(vec)
         with open(tfidf_path, 'wb') as fw:
@@ -76,8 +76,8 @@ if __name__ == '__main__':
     for line in lines:
         report_id, txt, classes = line.strip('\n').split('|,|')
         corpus.append(txt)
-    feature = SimpleFeature(vocab_path='../user_data/model_data/vocab.pkl', tfidf_path='../user_data/model_data/tf_idf.pkl')
-    feature.get_train_feature(corpus, save=False, vocab_path='../user_data/model_data/vocab.pkl', tfidf_path='../user_data/model_data/tf_idf.pkl')
+    feature = SimpleFeature(cbow_path='../user_data/model_data/vocab.pkl', tfidf_path='../user_data/model_data/tf_idf.pkl')
+    feature.get_train_feature(corpus, save=False, cbow_path='../user_data/model_data/vocab.pkl', tfidf_path='../user_data/model_data/tf_idf.pkl')
 
     print(feature.vectorizer.vocabulary_)
     for key, value in feature.vectorizer.vocabulary_.items():

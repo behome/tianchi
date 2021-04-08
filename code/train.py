@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 sys.path.append(os.path.curdir)
 import models as models
-from data_op import MedicalDataloader, MedicalEasyEnsembleDataloader
+from data_op import MedicalDataloader
 from losses import MultiWeightedBCELoss, MultiBceLoss
 import utils as utils
 from extract_feature import SimpleFeature
@@ -43,6 +43,9 @@ def parse_args():
     parser.add_argument("--class_id", type=int, default=0, help='the class id to train model')
     parser.add_argument("--model_num", type=int, default=4, help='the number model will be trained for current class')
     parser.add_argument("--vocab_size", type=int, default=848, help="the size of the vocabulary")
+    parser.add_argument('--vocab_path', type=str, default='./user_data/statistical_data/vocab.txt',
+                        help='vocabulary file')
+    parser.add_argument('--sample', type=str, default='none', help='the sample method to sample negative data')
     parser.add_argument("--embedding_size", type=int, default=256, help="the size of the word embedding")
     parser.add_argument("--w2v_file", type=str, default='./user_data/model_data/word2vec.256d.858.bin',
                         help='pretrained embedding')
@@ -67,7 +70,7 @@ def parse_args():
     parser.add_argument("--num_workers", type=int, default=1, help="the number of the process to read data")
     parser.add_argument("--max_length", type=int, default=100, help="the max length of the report sentence")
     parser.add_argument("--mlp_units", type=list, default=[256, ], help="The hidden units of the output layer")
-    parser.add_argument("--model_type", type=str, default="base", help="The type model to use")
+    parser.add_argument("--model_type", type=str, default="conv", help="The type model to use")
     parser.add_argument("--type_suffix", type=str, default="",
                         help="a suffix about this model type to distinguish each training")
     parser.add_argument("--device", type=int, default=0, help="the gpu device to run training")
@@ -77,13 +80,13 @@ def parse_args():
     parser.add_argument("--loss_log_every", type=int, default=200, help="the period to log loss")
     parser.add_argument("--patient", type=int, default=5, help='the patient to early stop')
     parser.add_argument("--use_tfidf", type=utils.str2bool, default=True, help='whether to use tf-idf feature')
-    parser.add_argument("--vocab_path", type=str, default='./user_data/model_data/vocab.pkl',
+    parser.add_argument("--cbow_path", type=str, default='./user_data/model_data/vocab.pkl',
                         help='the path store cbow model')
     parser.add_argument('--tfidf_path', type=str, default='./user_data/model_data/tf_idf.pkl',
                         help='the path store tfidf model')
     parser.add_argument("--threshold", type=int, default=0.5,
                         help='the threshold to determine the positive and negative')
-    parser.add_argument("--bi", type=utils.str2bool, default=True, help="whether to use bilstm")
+    parser.add_argument("--bi", type=utils.str2bool, default=False, help="whether to use bilstm")
     parser.add_argument('--amsgrad', type=utils.str2bool, default=True, help='.')
     args = parser.parse_args()
     return args
@@ -94,32 +97,25 @@ def eval_model(args, model, loss_func, val_data, epoch):
     val_loss = 0
     val_num = 0
     for i, data in enumerate(val_data):
-        tmp = [_.cuda(args.device) if isinstance(_, torch.Tensor) else _ for _ in data]
-        report_ids, sentence_ids, sentence_lengths, class_vec = tmp
-        pre = model(sentence_ids, sentence_lengths)
-        loss = loss_func(pre, class_vec)
-        print("val %d iter %d epoch:\t loss %.3f\t" %
-              (i, epoch, loss.item()))
-        val_num += 1
-        val_loss += loss.item()
+        with torch.no_grad:
+            tmp = [_.cuda(args.device) if isinstance(_, torch.Tensor) else _ for _ in data]
+            report_ids, sentence_ids, sentence_lengths, class_vec, class_label, label = tmp
+            pre = model(sentence_ids, sentence_lengths)
+            loss = loss_func(pre, class_label)
+            print("val %d iter %d epoch:\t loss %.3f\t" %
+                  (i, epoch, loss.item()))
+            val_num += 1
+            val_loss += loss.item()
     model.train()
     return val_loss / val_num
 
 
-def train(args, model_id, tb):
+def train(args, model_id, tb, train_data, val_data):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    if args.use_tfidf:
-        simple_feature = SimpleFeature(resume=True, vocab_path=args.vocab_path, tfidf_path=args.tfidf_path)
-    else:
-        simple_feature = None
-    train_data = MedicalEasyEnsembleDataloader(args.train_data, args.class_id, args.batch_size, True, args.num_workers,
-                                               use_tfidf=args.use_tfidf, simple_feature=simple_feature)
-    val_data = MedicalEasyEnsembleDataloader(args.val_data, args.class_id, args.batch_size, False, args.num_workers,
-                                             use_tfidf=args.use_tfidf, simple_feature=simple_feature)
     if os.path.exists(args.w2v_file):
         print("Loading pretrained embedding")
-        embedding = utils.load_embedding(args.w2v_file, vocab_size=args.vocab_size, embedding_size=args.embedding_size)
+        embedding = utils.load_embedding(args.w2v_file, train_data.dataset.id2w, embedding_size=args.embedding_size)
     else:
         embedding = None
     if args.model_type == 'lstm':
@@ -155,7 +151,7 @@ def train(args, model_id, tb):
         #     train_data.re_sample()
         for i, data in enumerate(train_data):
             tmp = [_.cuda(args.device) if isinstance(_, torch.Tensor) else _ for _ in data]
-            report_ids, sentence_ids, sentence_lengths, label = tmp
+            report_ids, sentence_ids, sentence_lengths, class_vec, class_label, label = tmp
             optimizer.zero_grad()
             pre = model(sentence_ids, sentence_lengths)
             loss = loss_func(pre, label)
@@ -170,7 +166,8 @@ def train(args, model_id, tb):
                 torch.save(model.state_dict(), os.path.join(args.checkpoint_path, str(args.class_id),
                                                             "%s_%s" % (args.model_type, args.type_suffix),
                                                             "model_%d.pth" % model_id))
-                with open(os.path.join(args.checkpoint_path, str(args.class_id), "config.json"), 'w', encoding='utf-8') as config_f:
+                with open(os.path.join(args.checkpoint_path, str(args.class_id), "config.json"), 'w', encoding='utf-8') \
+                        as config_f:
                     json.dump(vars(args), config_f, indent=2)
                 with open(os.path.join(args.checkpoint_path, str(args.class_id),
                                        "%s_%s" % (args.model_type, args.type_suffix), "config.json"), 'w',
@@ -205,8 +202,30 @@ if __name__ == '__main__':
                                  "%s_%s" % (args.model_type, args.type_suffix),))
     sw = SummaryWriter(os.path.join(args.checkpoint_path, str(args.class_id),
                                     "%s_%s" % (args.model_type, args.type_suffix),))
+    if args.use_tfidf:
+        simple_feature = SimpleFeature(resume=True, cbow_path=args.cbow_path, tfidf_path=args.tfidf_path)
+    else:
+        simple_feature = None
+    # data_path, vocab_path, vocab_size, class_id, num_class, batch_size, shuffle, num_worker,
+    #                  sample=True, use_tfidf=False,
+    #                  simple_feature=None
+    train_data = MedicalDataloader(args.train_data, args.vocab_path, args.vocab_size, args.class_id,
+                                   args.output_classes, args.batch_size, True,
+                                   args.num_workers,
+                                   'random',
+                                   use_tfidf=args.use_tfidf, simple_feature=simple_feature)
+    val_data = MedicalDataloader(args.val_data, args.vocab_path, args.vocab_size,
+                                 args.class_id, args.output_classes, args.batch_size, False,
+                                 args.num_workers,
+                                 'none',
+                                 use_tfidf=args.use_tfidf, simple_feature=simple_feature)
+    if args.sample == 'order':
+        args.model_num = train_data.dataset.slice_num
+    elif args.sample == 'none':
+        args.model_num = 1
     for i in range(args.model_num):
         print("==========================Start training the %d class %dth model===============" % (args.class_id, i))
-        train(args, i, sw)
+        train_data.re_sample(i)
+        train(args, i, sw, train_data, val_data)
 
 

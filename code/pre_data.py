@@ -51,7 +51,7 @@ def show_classes(training_path):
         weight1 = (total_num - occur_times) / total_num
         weight0 = occur_times / total_num
         weights[index, :] = [weight0, weight1]
-    np.save('../user_data/statistical_data/classes_weight.npy', weights)
+    # np.save('../user_data/statistical_data/classes_weight.npy', weights)
     plt.figure()
     plt.bar(x=num_keys, height=[classes_counter.get(key) for key in num_keys])
     plt.xticks(num_keys)
@@ -78,7 +78,7 @@ def split_train_val(origin_path, val_num):
         fout.writelines(val_data)
 
 
-def show_term_frequency(data_path):
+def show_term_frequency(data_path, vocab_path):
     with open(data_path, 'r') as fin:
         lines = fin.readlines()
     term_counter = Counter()
@@ -93,10 +93,41 @@ def show_term_frequency(data_path):
     # plt.xticks(num_keys)
     plt.show()
     s = term_counter.most_common()
-    print("Minimum frequency %d" % min(term_counter.values()))
-    print(s[0])
-    print(sum(term_counter.values()))
-    print("max rate %.5f" % (max(term_counter.values()) / sum(term_counter.values())))
+    i = 0
+    for item in s:
+        if item[1] >= 10000:
+            i += 1
+        else:
+            break
+    s = s[i:]
+    print("The size of the vocab is %d" % len(s))
+    # with open(vocab_path, 'w', encoding='utf-8') as f:
+    #     for item in s:
+    #         f.write("%s\t%d\n" % (item[0], item[1]))
+
+
+def show_term_heap(data_path):
+    with open(data_path, 'r') as fin:
+        lines = fin.readlines()
+    heap = np.zeros((50, 17))
+    for line in lines:
+        report_id, txt, c = line.strip('\n').split('|,|')
+        txt_ids = [int(ids) for ids in txt.split(' ') if ids.strip() != '']
+        c_ids = [int(ids) for ids in c.split(' ') if ids.strip() != '']
+        for i in txt_ids:
+            if i < 50:
+                heap[i][c_ids] += 1
+    fig, ax = plt.subplots()
+    im = ax.imshow(heap)
+    cbar = ax.figure.colorbar(im, ax=ax)
+    # We want to show all ticks...
+    ax.set_xticks(np.arange(heap.shape[1]))
+    # ax.set_yticks(np.arange(heap.shape[0]))
+    # plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+    #          rotation_mode="anchor")
+    ax.set_title("term class Heap")
+    fig.tight_layout()
+    plt.show()
 
 
 def show_co_occurrence(data_path):
@@ -113,7 +144,6 @@ def show_co_occurrence(data_path):
                 heap[i, j] += 1
     for i in range(heap.shape[0]):
         heap[i] /= classes_counter[i]
-    print(heap)
     np.save("../user_data/statistical_data/co_occur_norm.npy", heap)
     fig, ax = plt.subplots()
     im = ax.imshow(heap)
@@ -131,8 +161,9 @@ def show_co_occurrence(data_path):
 if __name__ == '__main__':
     # max_id = get_vocab('../tc_data/track1_round1_train_20210222.csv')
     # print(max_id)
-    show_classes('../tc_data/track1_round1_train_20210222_train.csv')
+    show_classes('../tc_data/track1_round1_train_20210222_val.csv')
     # split_train_val('../tc_data/track1_round1_train_20210222.csv', 2000)
-    # show_term_frequency('../tc_data/track1_round1_train_20210222_val.csv')
+    # show_term_frequency('../tc_data/track1_round1_train_20210222.csv', "../user_data/statistical_data/vocab.txt")
     # show_co_occurrence('../tc_data/track1_round1_train_20210222.csv')
+    # show_term_heap('../tc_data/track1_round1_train_20210222.csv')
 

@@ -26,12 +26,31 @@ def set_lr(optimizer, lr):
         group['lr'] = lr
 
 
-def load_embedding(w2v_file, vocab_size=859, embedding_size=256):
+def load_embedding(w2v_file, id2w, embedding_size=256):
     w2v = gensim.models.Word2Vec.load(w2v_file).wv
-    embedding = torch.zeros((vocab_size, embedding_size), dtype=torch.float32)
-    for i in range(1, vocab_size):
-        embedding[i] = torch.from_numpy(w2v[str(i - 1)].copy())
+    embedding = torch.zeros((len(id2w), embedding_size), dtype=torch.float32)
+    for key in id2w.keys():
+        if key == 1:
+            embedding[key] = torch.rand(embedding_size)
+        elif key == 0:
+            continue
+        else:
+            embedding[key] = torch.from_numpy(w2v[id2w[key]].copy())
     return embedding
+
+
+def load_vocab(vocab_path, vocab_size):
+    with open(vocab_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    w2id = {'<pad>': 0, '<unk>': 1}
+    id2w = {0: '<pad>', 1: '<unk>'}
+    for i, line in enumerate(lines, 2):
+        if i >= vocab_size:
+            break
+        word = line.strip('\n').split('\t')[0]
+        w2id[word] = i
+        id2w[i] = word
+    return w2id, id2w
 
 
 def str2bool(v):

@@ -12,9 +12,10 @@ import json
 import argparse
 import torch
 import numpy as np
+
 sys.path.append(os.path.curdir)
 import models
-from data_op import MedicalTestDataloader, MedicalEasyEnsembleDataloader, MedicalDataloader
+from data_op import MedicalTestDataloader, MedicalDataloader
 from losses import MultiBceLoss
 from extract_feature import SimpleFeature
 import utils
@@ -24,10 +25,13 @@ def test(global_args):
     torch.manual_seed(global_args.seed)
     np.random.seed(global_args.seed)
     if global_args.use_tfidf:
-        simple_feature = SimpleFeature(resume=True, vocab_path=global_args.vocab_path, tfidf_path=global_args.tfidf_path)
+        simple_feature = SimpleFeature(resume=True, cbow_path=global_args.cbow_path,
+                                       tfidf_path=global_args.tfidf_path)
     else:
         simple_feature = None
-    test_data = MedicalTestDataloader(global_args.test_data, global_args.batch_size, global_args.num_workers,
+    # data_path, vocab_path, vocab_size, batch_size, num_worker, use_tfidf=False, simple_feature=None
+    test_data = MedicalTestDataloader(global_args.test_data, global_args.vocab_path, global_args.vocab_size,
+                                      global_args.batch_size, global_args.num_workers,
                                       use_tfidf=global_args.use_tfidf, simple_feature=simple_feature)
     model_corpus = load_all_model(global_args.root_dir, global_args.device)
 
@@ -55,14 +59,19 @@ def eval_model(global_args):
     torch.manual_seed(global_args.seed)
     np.random.seed(global_args.seed)
     if global_args.use_tfidf:
-        simple_feature = SimpleFeature(resume=True, vocab_path=global_args.vocab_path,
+        simple_feature = SimpleFeature(resume=True, cbow_path=global_args.cbow_path,
                                        tfidf_path=global_args.tfidf_path)
     else:
         simple_feature = None
-    val_data = MedicalEasyEnsembleDataloader(global_args.val_data, global_args.class_id, global_args.batch_size,
-                                             False,
-                                             global_args.num_workers,
-                                             use_tfidf=global_args.use_tfidf, simple_feature=simple_feature)
+    # data_path, vocab_path, vocab_size, class_id, num_class, batch_size, shuffle, num_worker, simple=True, use_tfidf=False,
+    #                  simple_feature=None
+    val_data = MedicalDataloader(global_args.val_data, global_args.vocab_path, global_args.vocab_size,
+                                 global_args.class_id, global_args.output_classes,
+                                 global_args.batch_size,
+                                 False,
+                                 global_args.num_workers,
+                                 'none',
+                                 use_tfidf=global_args.use_tfidf, simple_feature=simple_feature)
     loss_func = MultiBceLoss()
     model_corpus = load_class_model(global_args.root_dir, global_args.class_id, global_args.device)
     loss_sum = 0
@@ -132,7 +141,7 @@ if __name__ == '__main__':
     parser.add_argument("--seed", type=int, default=9233, help="The random seed to all")
     parser.add_argument("--device", type=int, default=0, help="The device to use")
     parser.add_argument("--use_tfidf", type=utils.str2bool, default=False, help='whether to use tf-idf feature')
-    parser.add_argument("--vocab_path", type=str, default='./user_data/model_data/vocab.pkl',
+    parser.add_argument("--cbow_path", type=str, default='./user_data/model_data/vocab.pkl',
                         help='the path store cbow model')
     parser.add_argument('--tfidf_path', type=str, default='./user_data/model_data/tf_idf.pkl',
                         help='the path store tfidf model')
