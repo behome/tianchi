@@ -8,6 +8,7 @@
 
 import torch
 import gensim
+import argparse
 
 
 def build_optimizer(args, param):
@@ -31,3 +32,12 @@ def load_embedding(w2v_file, vocab_size=859, embedding_size=256):
     for i in range(1, vocab_size):
         embedding[i] = torch.from_numpy(w2v[str(i - 1)].copy())
     return embedding
+
+
+def str2bool(v):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Unsupported value encountered.')

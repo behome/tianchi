@@ -92,7 +92,11 @@ def show_term_frequency(data_path):
     plt.bar(x=num_keys, height=[term_counter.get(key) for key in num_keys])
     # plt.xticks(num_keys)
     plt.show()
+    s = term_counter.most_common()
     print("Minimum frequency %d" % min(term_counter.values()))
+    print(s[0])
+    print(sum(term_counter.values()))
+    print("max rate %.5f" % (max(term_counter.values()) / sum(term_counter.values())))
 
 
 def show_co_occurrence(data_path):
@@ -127,8 +131,8 @@ def show_co_occurrence(data_path):
 if __name__ == '__main__':
     # max_id = get_vocab('../tc_data/track1_round1_train_20210222.csv')
     # print(max_id)
-    # show_classes('../tc_data/track1_round1_train_20210222.csv')
+    show_classes('../tc_data/track1_round1_train_20210222_train.csv')
     # split_train_val('../tc_data/track1_round1_train_20210222.csv', 2000)
-    # show_term_frequency('../tc_data/track1_round1_train_20210222.csv')
-    show_co_occurrence('../tc_data/track1_round1_train_20210222.csv')
+    # show_term_frequency('../tc_data/track1_round1_train_20210222_val.csv')
+    # show_co_occurrence('../tc_data/track1_round1_train_20210222.csv')
 

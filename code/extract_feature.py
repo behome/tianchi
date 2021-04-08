@@ -70,4 +70,18 @@ class SimpleFeature:
 
 
 if __name__ == '__main__':
-    pass
+    with open("../tc_data/track1_round1_train_20210222.csv", 'r') as f:
+        lines = f.readlines()
+    corpus = []
+    for line in lines:
+        report_id, txt, classes = line.strip('\n').split('|,|')
+        corpus.append(txt)
+    feature = SimpleFeature(vocab_path='../user_data/model_data/vocab.pkl', tfidf_path='../user_data/model_data/tf_idf.pkl')
+    feature.get_train_feature(corpus, save=False, vocab_path='../user_data/model_data/vocab.pkl', tfidf_path='../user_data/model_data/tf_idf.pkl')
+
+    print(feature.vectorizer.vocabulary_)
+    for key, value in feature.vectorizer.vocabulary_.items():
+        print(key, value)
+    # txt = '623 328 399 698 493 338 266 14 177 415 511 647 693 852 60 328 380 172 54 788 591 487'
+    # vec = feature.get_tf_idf([txt])
+    # print(vec.shape)
